@@ -26,7 +26,8 @@ TAG        = latest
 # Makefile.docker overwrites
 NAME       = PHP
 VERSION    = 8.4
-IMAGE      = devilbox/php-fpm-$(VERSION)
+REPOSITORY_NAME = devilbox
+IMAGE      = $(REPOSITORY_NAME)/php-fpm-$(VERSION)
 DIR        = Dockerfiles
 FILE       = Dockerfile
 DOCKER_TAG = $(TAG)
