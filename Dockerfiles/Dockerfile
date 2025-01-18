@@ -4,7 +4,7 @@
 # PLEASE DO NOT EDIT IT DIRECTLY.
 #
 
-FROM debian:bullseye
+FROM debian:bullseye-slim
 
 # prevent Debian's PHP packages from being installed
 # https://github.com/docker-library/php/pull/542
@@ -36,6 +36,7 @@ RUN set -eux; \
 		ca-certificates \
 		curl \
 		xz-utils \
+		jq \
 	 ; \
 	 rm -rf /var/lib/apt/lists/*
 
@@ -77,8 +78,16 @@ RUN set -eux; \
 	cd /usr/src; \
 	cd /usr/src; \
 	\
-	#curl -fsSL -o php.tar.xz "$PHP_URL"; \
-	#\
+	echo "Cache bust: $(date +%s)"; \
+	LAST_VERSION_PHP=$(curl -s 'https://www.php.net/releases/active.php' | jq -r '.["8"]["8.4"].version'); \
+	echo $LAST_VERSION_PHP; \
+	URL=https://www.php.net/distributions/php-$LAST_VERSION_PHP.tar.xz; \
+	\
+	curl -fsSL -o php.tar.xz $URL; \
+	tar -xJf php.tar.xz; \
+	mv ./php-${LAST_VERSION_PHP} ./php; \
+	cd php; \
+	\
 #	if [ -n "$PHP_SHA256" ]; then \
 #		echo "$PHP_SHA256 *php.tar.xz" | sha256sum -c -; \
 #	fi; \
@@ -93,15 +102,19 @@ RUN set -eux; \
 	#	gpgconf --kill all; \
 #		rm -rf "$GNUPGHOME"; \
 #	fi; \
-	git clone https://github.com/php/php-src php; \
-	cd php; \
-	git checkout "$( \
-		git for-each-ref --format='%(refname)' refs/tags \
-		| grep -E 'refs/tags/php-8\.4[.0-9]+$' \
-		| sed 's|.*tags/||g' \
-		| sort -V \
-		| tail -1 \
-	)"; \
+	\
+	\
+	# git clone https://github.com/php/php-src php; \
+	# cd php; \
+	# git checkout "$( \
+	# 	git for-each-ref --format='%(refname)' refs/tags \
+	# 	| grep -E 'refs/tags/php-8\.4[.0-9]+$' \
+	# 	| sed 's|.*tags/||g' \
+	# 	| sort -V \
+	# 	| tail -1 \
+	# )"; \
+	\
+	\
 	./buildconf --force; \
 	rm -rf .git; \
 	cd /usr/src; \
