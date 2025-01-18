@@ -78,7 +78,6 @@ RUN set -eux; \
 	cd /usr/src; \
 	cd /usr/src; \
 	\
-	echo "Cache bust: $(date +%s)"; \
 	LAST_VERSION_PHP=$(curl -s 'https://www.php.net/releases/active.php' | jq -r '.["8"]["8.4"].version'); \
 	echo $LAST_VERSION_PHP; \
 	URL=https://www.php.net/distributions/php-$LAST_VERSION_PHP.tar.xz; \
