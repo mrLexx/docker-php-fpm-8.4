@@ -4,7 +4,7 @@
 # PLEASE DO NOT EDIT IT DIRECTLY.
 #
 
-FROM debian:bullseye-slim
+FROM debian:bookworm-slim
 
 # prevent Debian's PHP packages from being installed
 # https://github.com/docker-library/php/pull/542
@@ -15,18 +15,22 @@ RUN set -eux; \
 		echo 'Pin-Priority: -1'; \
 	} > /etc/apt/preferences.d/no-debian-php
 
-# dependencies required for running "phpize"
+# dependencies required for running "phpize && pie"
 # (see persistent deps below)
 ENV PHPIZE_DEPS="\
 		autoconf \
+		automake \
 		dpkg-dev \
 		file \
 		g++ \
 		gcc \
 		libc-dev \
+		libtool \
+		m4 \
 		make \
 		pkg-config \
-		re2c"
+		re2c \
+		unzip"
 
 # persistent / runtime deps
 RUN set -eux; \
@@ -36,6 +40,7 @@ RUN set -eux; \
 		ca-certificates \
 		curl \
 		xz-utils \
+		jq \
 	 ; \
 	 rm -rf /var/lib/apt/lists/*
 
@@ -75,33 +80,16 @@ RUN set -eux; \
 	\
 	mkdir -p /usr/src; \
 	cd /usr/src; \
-	cd /usr/src; \
 	\
-	#curl -fsSL -o php.tar.xz "$PHP_URL"; \
-	#\
-#	if [ -n "$PHP_SHA256" ]; then \
-#		echo "$PHP_SHA256 *php.tar.xz" | sha256sum -c -; \
-#	fi; \
-#	\
-#	if [ -n "$PHP_ASC_URL" ]; then \
-	#	curl -fsSL -o php.tar.xz.asc "$PHP_ASC_URL"; \
-#		export GNUPGHOME="$(mktemp -d)"; \
-#		for key in $GPG_KEYS; do \
-	#		gpg --batch --keyserver ha.pool.sks-keyservers.net --recv-keys "$key"; \
-#		done; \
-#		gpg --batch --verify php.tar.xz.asc php.tar.xz; \
-	#	gpgconf --kill all; \
-#		rm -rf "$GNUPGHOME"; \
-#	fi; \
-	git clone https://github.com/php/php-src php; \
+	LAST_VERSION_PHP=$(curl -s 'https://www.php.net/releases/active.php' | jq -r '.["8"]["8.4"].version'); \
+	echo $LAST_VERSION_PHP; \
+	URL=https://www.php.net/distributions/php-$LAST_VERSION_PHP.tar.xz; \
+	\
+	curl -fsSL -o php.tar.xz $URL; \
+	tar -xJf php.tar.xz; \
+	mv ./php-${LAST_VERSION_PHP} ./php; \
 	cd php; \
-	git checkout "$( \
-		git for-each-ref --format='%(refname)' refs/tags \
-		| grep -E 'refs/tags/php-8\.4[.0-9]+$' \
-		| sed 's|.*tags/||g' \
-		| sort -V \
-		| tail -1 \
-	)"; \
+	\
 	./buildconf --force; \
 	rm -rf .git; \
 	cd /usr/src; \
@@ -121,6 +109,7 @@ RUN set -eux; \
 	apt-get install -y --no-install-recommends \
 		bison \
 		libargon2-dev \
+		libpng-dev libjpeg-dev libxpm-dev libvpx-dev zlib1g-dev libfreetype6-dev libwebp-dev libavif-dev \
 		libcurl4-openssl-dev \
 		libedit-dev \
 		libffi-dev \
@@ -183,6 +172,10 @@ RUN set -eux; \
 		--with-openssl \
 		--with-readline \
 		--with-zlib \
+		--enable-gd --with-webp --with-jpeg --with-xpm --with-freetype --with-avif \
+		--with-mysqli=mysqlnd \
+		--with-pdo-mysql=mysqlnd \
+		--with-openssl \
 		\
 # in PHP 7.4+, the pecl/pear installers are officially deprecated (requiring an explicit "--with-pear")
 		--with-pear \
@@ -207,7 +200,7 @@ RUN set -eux; \
 	docker-php-source delete; \
 	\
 # reset apt-mark's "manual" list so that "purge --auto-remove" will remove all build dependencies
-	apt-mark auto '.*' > /dev/null; \
+	# disable clear # apt-mark auto '.*' > /dev/null; \
 	[ -z "$savedAptMark" ] || apt-mark manual $savedAptMark; \
 	find /usr/local -type f -executable -exec ldd '{}' ';' \
 		| awk '/=>/ { print $(NF-1) }' \
@@ -217,17 +210,21 @@ RUN set -eux; \
 		| sort -u \
 		| xargs -r apt-mark manual \
 	; \
-	apt-get purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false; \
+	# disable clear # apt-get purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false; \
 	rm -rf /var/lib/apt/lists/*; \
 	\
 # update pecl channel definitions https://github.com/docker-library/php/issues/443
+	which pecl || echo "pecl not found"; \
 	pecl update-channels; \
 	rm -rf /tmp/pear ~/.pearrc; \
 	\
 # smoke test
+	which php  || echo "php not found" \
 	php --version
 
 COPY data/docker-php-ext-* data/docker-php-entrypoint /usr/local/bin/
+
+COPY --from=ghcr.io/php/pie:bin /pie /usr/bin/pie
 
 # sodium was built as a shared module (so that it can be replaced later if so desired), so let's enable it too (https://github.com/docker-library/php/issues/598)
 RUN docker-php-ext-enable sodium
